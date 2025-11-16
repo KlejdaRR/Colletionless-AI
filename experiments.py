@@ -5,6 +5,11 @@ import collaborative_classroom as CollaborativeClassroom
 
 class Experiments:
 
+    # Data Pipeline Setup
+    # Data Preprocessing Pipeline:
+    # ToTensor(): Convert images from (0-255) to (0.0-1.0) tensors
+    # Normalize((0.1307,), (0.3081,)): Standardize using MNIST mean & std
+    # Why normalize: Helps neural networks learn faster and more stable
     @staticmethod
     def create_data_stream(batch_size=32):
         transform = transforms.Compose([
@@ -12,9 +17,18 @@ class Experiments:
             transforms.Normalize((0.1307,), (0.3081,))
         ])
 
+        # Dataset Creation:
+        # Training set: 60,000 images for learning
+        # Test set: 10,000 images for evaluation
+        # download=True: Automatically downloads if not present
         train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
         test_dataset = datasets.MNIST('./data', train=False, transform=transform)
 
+        # Data Loaders - The Collectionless Stream:
+        # Key Collectionless Feature:
+        # shuffle=True: Random order every epoch = true streaming experience
+        # No storage: Data flows through, never accumulated
+        # Batch processing: Learn from 64 images, then discard
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=False)
 
@@ -24,9 +38,22 @@ class Experiments:
     def run_experiment():
         print("Initializing Collaborative Classroom Experiment...")
 
-        classroom = CollaborativeClassroom.CollaborativeClassroom(num_students=8, moving_avg_window=100, eval_interval=200)
+        # Phase 1: Setup
+        # Your Experimental Configuration:
+        # 8 students: Enough for diversity, manageable computation
+        # 100-loss window: Track recent performance effectively
+        # Evaluate every 200 steps: Frequent enough to catch trends
+        # Batch size 64: Balance between stability and speed
+        classroom = CollaborativeClassroom.CollaborativeClassroom(num_students=8, moving_avg_window=100,
+                                                                  eval_interval=200)
         train_loader, test_loader = Experiments.create_data_stream(batch_size=64)
 
+        # Phase 2: Training Loop
+        # Collectionless Data Streaming:
+        # iter(train_loader): Creates an iterator over the data stream
+        # next(data_iter): Gets next batch (64 images + labels)
+        # StopIteration: When stream ends, restart from beginning
+        # No memory: Each batch processed and forgotten
         steps = 5000
         eval_every = 500
 
@@ -40,6 +67,11 @@ class Experiments:
                 data_iter = iter(train_loader)
                 x, y_true = next(data_iter)
 
+            # Phase 3: Learning & Evaluation Cycle
+            # Periodic Checkpoints:
+            # Every 500 steps: Take snapshot of performance
+            # Real-time monitoring: Watch collective intelligence emerge
+            # Phase tracking: See teacher→peer transition
             classroom.learn_step(x, y_true, step)
 
             if step % eval_every == 0 or step == steps - 1:
@@ -48,6 +80,7 @@ class Experiments:
                       f"Best Student: {best_acc:.3f} | Class: {class_acc:.3f} | "
                       f"Phase: {classroom.phase}")
 
+        # Phase 4: Results Analysis
         print("\n" + "=" * 60)
         print("EXPERIMENT RESULTS")
         print("=" * 60)

@@ -1,4 +1,3 @@
-
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
@@ -9,18 +8,36 @@ from Models.Student import Student
 
 class CollaborativeClassroom:
     def __init__(self, num_students=10, moving_avg_window=50, eval_interval=100):
-        self.num_students = num_students
-        self.moving_avg_window = moving_avg_window
-        self.eval_interval = eval_interval
+        self.num_students = num_students # How many neural networks in the classroom
+        self.moving_avg_window = moving_avg_window # How many recent losses to track per student
+        self.eval_interval = eval_interval # How often to find the "best student"
 
         self.students = [Student() for _ in range(num_students)]
+        # Creating num_students independent neural networks
+        # Each student has different random initial weights -> Diverse starting points for learning
+
         self.optimizers = [optim.Adam(student.parameters(), lr=0.001) for student in self.students]
+        # One optimizer per student: Each student learns at their own pace
+        # Adam optimizer: Adaptive learning rate (smarter than basic SGD)
+        # Learning rate 0.001
 
         self.teacher = Teacher()
+        # Single teacher for all students
+        # Starts with 1000 teaching opportunities
+        # Will retire after providing 1000 correct answers (true labels)
 
         self.loss_memory = [deque(maxlen=moving_avg_window) for _ in range(num_students)]
+        # Creating one loss history queue per student
+        # deque(maxlen=100): Fixed-size queue that automatically discards old losses
+        # Purpose: Tracking recent performance to identify the best student
+        # Example:
+        # Student 1: [0.45, 0.42, 0.38, ..., 0.12] (last 100 losses)
+        # Student 2: [0.51, 0.48, 0.44, ..., 0.15] (last 100 losses)
+
         self.best_student_idx = 0
         self.phase = "teacher_phase"
+        # best_student_idx = 0: Starting by assuming student #0 is best (will update)
+        # phase = "teacher_phase": Starting with teacher-led learning
 
         self.history = {
             'teacher_accuracy': [],
@@ -29,15 +46,33 @@ class CollaborativeClassroom:
             'class_surpassed_best': False,
             'step_when_surpassed': None
         }
+        # Tracking: Accuracy over time for analysis
+        # Milestone tracking: When class beats best student
+        # Purpose: For plots and proving collective intelligence emerged
 
     def get_moving_average_loss(self, student_idx):
         if len(self.loss_memory[student_idx]) == 0:
             return float('inf')
         return np.mean(list(self.loss_memory[student_idx]))
 
+    # Checks if student has learning history: len(self.loss_memory[student_idx]) == 0
+    # If no history: Returns float('inf') (infinity) - worst possible score
+    # If it has history: Calculates average of recent losses
+    # Student #3's loss_memory: [0.45, 0.42, 0.38, 0.35, 0.32]
+    # get_moving_average_loss(3) → (0.45+0.42+0.38+0.35+0.32)/5 = 0.384
+
     def find_best_student(self):
         avg_losses = [self.get_moving_average_loss(i) for i in range(self.num_students)]
         return np.argmin(avg_losses)
+    # # Step 1: Get average loss for each student
+    # avg_losses = [
+    #     get_moving_average_loss(0),  # Student 0: 0.42
+    #     get_moving_average_loss(1),  # Student 1: 0.38  ← Lowest!
+    #     get_moving_average_loss(2),  # Student 2: 0.45
+    #     # ... up to student 7
+    # ]    #
+    # # Step 2: Find index of minimum loss
+    # best_index = np.argmin([0.42, 0.38, 0.45, ...])  # Returns 1
 
     def evaluate_students(self, test_loader, step):
         teacher_correct = 0
@@ -45,17 +80,27 @@ class CollaborativeClassroom:
         class_total_correct = 0
         total_samples = 0
 
-        with torch.no_grad():
-            for data, target in test_loader:
+        with torch.no_grad():  # Disable gradient calculation for efficiency
+            for data, target in test_loader:  # Process one batch of test data
+
+                # Teacher Accuracy (if available):
                 if self.teacher.calls_remaining > 0:
                     teacher_pred = self.students[self.best_student_idx](data)
                     teacher_pred = teacher_pred.argmax(dim=1, keepdim=True)
                     teacher_correct += teacher_pred.eq(target.view_as(teacher_pred)).sum().item()
+                    # Best student makes predictions on test batch
+                    # Convert probabilities to class labels (0-9) with argmax
+                    # Compare predictions with true labels (target)
+                    # Count how many are correct
 
+                # Best Student Accuracy:
                 best_pred = self.students[self.best_student_idx](data)
                 best_pred = best_pred.argmax(dim=1, keepdim=True)
                 best_student_correct += best_pred.eq(target.view_as(best_pred)).sum().item()
+                # Same process as teacher accuracy
+                # Always calculated to track individual performance
 
+                # Class Collective Accuracy:
                 class_predictions = []
                 for student in self.students:
                     pred = student(data)
@@ -64,13 +109,24 @@ class CollaborativeClassroom:
                 class_votes = torch.stack(class_predictions)
                 class_final_pred = torch.mode(class_votes, dim=0)[0]
                 class_total_correct += class_final_pred.eq(target.view_as(class_final_pred)).sum().item()
+                # 8 Students voting on 4 test images:
+                # Image 1: [7, 7, 2, 7, 7, 7, 7, 7] → Majority: 7 ✓
+                # Image 2: [3, 3, 3, 8, 3, 3, 3, 3] → Majority: 3 ✓
+                # Image 3: [1, 9, 1, 1, 9, 1, 1, 1] → Majority: 1 ✓
+                # Image 4: [4, 4, 6, 4, 6, 6, 4, 4] → Majority: 4 ✓
+                # Result: 4/4 correct through collective wisdom
 
                 total_samples += len(data)
 
+        #  Calculate Accuracies:
         teacher_acc = teacher_correct / total_samples if teacher_correct > 0 else 0
         best_acc = best_student_correct / total_samples
         class_acc = class_total_correct / total_samples
+        # Convert raw counts to percentages
+        # Example: 950 correct out of 1000 samples = 95% accuracy
 
+
+        #  Track History & Detect Breakthrough:
         self.history['teacher_accuracy'].append(teacher_acc)
         self.history['best_student_accuracy'].append(best_acc)
         self.history['class_avg_accuracy'].append(class_acc)
@@ -82,19 +138,40 @@ class CollaborativeClassroom:
             self.history['step_when_surpassed'] = step
             print(f"\n BREAKTHROUGH! Class surpassed best student at step {step}!")
             print(f"Class Accuracy: {class_acc:.4f}, Best Student Accuracy: {best_acc:.4f}")
+        # EVALUATION AT STEP 1000:
+        # ─────────────────────────────────────
+        # Test Batch: 1000 images
+        # ├── Teacher Accuracy:    94.3% (if teacher active)
+        # ├── Best Student Accuracy: 94.0%
+        # └── Class Collective Accuracy: 95.9%  ← BREAKTHROUGH
+        # BREAKTHROUGH DETECTED!
+        # Class is 1.9% better than the best individual
 
         return teacher_acc, best_acc, class_acc
 
     def learn_step(self, x, y_true, step):
+        # x: Batch of images (e.g., 64 MNIST images)
+        # y_true: Correct labels for those images
+        # step: Current training step (0 to 5000)
 
+        #  Phase 1: Determine Learning Mode
         if self.teacher.calls_remaining > 0 and step < 2000:
             self.phase = "teacher_phase"
         else:
             self.phase = "peer_phase"
+        # Decision Logic:
+        # Teacher Phase: Steps 0-2000 AND teacher still has calls remaining
+        # Peer Phase: After step 2000 OR teacher exhausted
+        # Setup: Teacher has 1000 calls, so phase transition happens at step 2000
 
+        #  Phase 2: Update Best Student (Periodically)
         if step % self.eval_interval == 0:
             self.best_student_idx = self.find_best_student()
+        # Every 200 steps: Re-evaluate who's the best student
+        # Purpose: Ensure we're learning from the current top performer
+        # Example: At steps 0, 200, 400, 600... find new best student
 
+        # Phase 3A: Teacher-Led Learning
         if self.phase == "teacher_phase":
             for i, (student, optimizer) in enumerate(zip(self.students, self.optimizers)):
                 optimizer.zero_grad()
@@ -103,12 +180,34 @@ class CollaborativeClassroom:
                 loss.backward()
                 optimizer.step()
                 self.loss_memory[i].append(loss.item())
+        # Step-by-step Teacher Phase:
+        # For each student (0-7):
+        # Reset gradients: optimizer.zero_grad() - clear previous update directions
+        # Forward pass: output = student(x) - make predictions on current batch
+        # Calculate loss: F.nll_loss(output, y_true) - compare with teacher's correct answers
+        # Backward pass: loss.backward() - calculate how to improve (gradients)
+        # Update weights: optimizer.step() - actually improve the network
+        # Record loss: self.loss_memory[i].append(loss.item()) - track performance
 
+        # Phase 3B: Peer-to-Peer Learning
         else:
+            # Step 1: Best Student Creates "Soft Targets"
+            # with torch.no_grad(): Best student makes predictions but doesn't learn (frozen for this step)
+            # best_student_output: Raw scores from the best student's brain
+            # soft_targets = F.softmax(best_student_output / 2.0, dim=1): Convert to probabilities with "temperature"
+            # Without temperature (normal softmax):
+            # [8.0, 2.0, 0.1] → [0.97, 0.03, 0.00] (very confident)
+            # With temperature=2.0:
+            # [8.0/2, 2.0/2, 0.1/2] = [4.0, 1.0, 0.05] → [0.95, 0.05, 0.00] (softer, more informative)
             with torch.no_grad():
                 best_student_output = self.students[self.best_student_idx](x)
                 soft_targets = F.softmax(best_student_output / 2.0, dim=1)
 
+            # Step 2: Different Learning Paths
+            # Best Student's Special Treatment:
+            # If teacher still available: Learns from ground truth (stays sharp)
+            # If teacher exhausted: Takes a break this step
+            # Why: Prevent the expert from being corrupted by teaching others
             for i, (student, optimizer) in enumerate(zip(self.students, self.optimizers)):
                 if i == self.best_student_idx:
                     # Best student continues learning from data (if teacher available)
@@ -121,15 +220,21 @@ class CollaborativeClassroom:
                         self.loss_memory[i].append(loss.item())
                     continue
 
+                # Step 3: Other Students Learn from Best Student
                 optimizer.zero_grad()
                 student_output = student(x)
 
+                # Knowledge Distillation Process:
+                # Student makes prediction: student_output = student(x)
+                # Compare with best student: KL divergence measures how different the thinking is
+                # KL Divergence: "How much should I change my thinking to match the expert?"
                 distillation_loss = F.kl_div(
                     F.log_softmax(student_output / 2.0, dim=1),
                     soft_targets,
                     reduction='batchmean'
                 )
 
+                # Step 4: Combined Learning (If Teacher Available)
                 if self.teacher.calls_remaining > 0:
                     classification_loss = F.nll_loss(student_output, y_true)
                     total_loss = 0.7 * distillation_loss + 0.3 * classification_loss
@@ -139,3 +244,7 @@ class CollaborativeClassroom:
                 total_loss.backward()
                 optimizer.step()
                 self.loss_memory[i].append(total_loss.item())
+                # Loss Balancing:
+                # 70%: Learn from the best student's thinking style
+                # 30%: Learn from ground truth answers (if available)
+                # Gradual transition: Pure distillation when teacher leaves
