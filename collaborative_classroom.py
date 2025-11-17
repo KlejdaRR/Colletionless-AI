@@ -7,10 +7,11 @@ from Models.Teacher import Teacher
 from Models.Student import Student
 
 class CollaborativeClassroom:
-    def __init__(self, num_students=10, moving_avg_window=50, eval_interval=100):
-        self.num_students = num_students # How many neural networks in the classroom
-        self.moving_avg_window = moving_avg_window # How many recent losses to track per student
-        self.eval_interval = eval_interval # How often to find the "best student"
+    def __init__(self, num_students=8, moving_avg_window=100, eval_interval=200, val_batch_size=100):
+        self.num_students = num_students  # How many neural networks in the classroom
+        self.moving_avg_window = moving_avg_window  # How many recent losses to track per student
+        self.eval_interval = eval_interval  # How often to find the "best student"
+        self.val_batch_size = val_batch_size  # Size of validation batches for best student selection
 
         self.students = [Student() for _ in range(num_students)]
         # Creating num_students independent neural networks
@@ -39,6 +40,10 @@ class CollaborativeClassroom:
         # best_student_idx = 0: Starting by assuming student #0 is best (will update)
         # phase = "teacher_phase": Starting with teacher-led learning
 
+        # Virtualization: Storing validation batches for consistent evaluation
+        self.validation_batches = []
+        # Same data used every time we evaluate who's the best
+
         self.history = {
             'teacher_accuracy': [],
             'best_student_accuracy': [],
@@ -50,6 +55,55 @@ class CollaborativeClassroom:
         # Milestone tracking: When class beats best student
         # Purpose: For plots and proving collective intelligence emerged
 
+    def setup_validation_batches(self, val_loader, num_batches=5):
+        # Extracting and store fixed validation batches for consistent evaluation
+        self.validation_batches = []
+        val_iter = iter(val_loader)
+
+        for _ in range(num_batches):
+            try:
+                x_val, y_val = next(val_iter)
+                self.validation_batches.append((x_val, y_val))
+            except StopIteration:
+                break
+
+        print(f"Created {len(self.validation_batches)} validation batches for best student selection")
+
+    def evaluate_student_on_validation(self, student_idx):
+        ## Evaluating a single student on all validation batches
+        student = self.students[student_idx]
+        total_correct = 0
+        total_samples = 0
+
+        with torch.no_grad():
+            for x_val, y_val in self.validation_batches:
+                output = student(x_val)
+                pred = output.argmax(dim=1, keepdim=True)
+                correct = pred.eq(y_val.view_as(pred)).sum().item()
+                total_correct += correct
+                total_samples += len(x_val)
+
+        return total_correct / total_samples if total_samples > 0 else 0
+
+    def find_best_student(self):
+        # Finding the best student based on validation performance
+        # Using validation accuracy instead of training loss because training loss can be misleading due to overfitting
+        # Validation accuracy shows true generalization ability
+
+        if not self.validation_batches:
+            # Fallback to training loss if no validation batches available
+            avg_losses = [self.get_moving_average_loss(i) for i in range(self.num_students)]
+            return np.argmin(avg_losses)
+
+        # Evaluating all students on validation set
+        val_accuracies = []
+        for i in range(self.num_students):
+            accuracy = self.evaluate_student_on_validation(i)
+            val_accuracies.append(accuracy)
+
+        # Returning student with the highest validation accuracy
+        return np.argmax(val_accuracies)
+
     def get_moving_average_loss(self, student_idx):
         if len(self.loss_memory[student_idx]) == 0:
             return float('inf')
@@ -60,19 +114,6 @@ class CollaborativeClassroom:
     # If it has history: Calculates average of recent losses
     # Student #3's loss_memory: [0.45, 0.42, 0.38, 0.35, 0.32]
     # get_moving_average_loss(3) → (0.45+0.42+0.38+0.35+0.32)/5 = 0.384
-
-    def find_best_student(self):
-        avg_losses = [self.get_moving_average_loss(i) for i in range(self.num_students)]
-        return np.argmin(avg_losses)
-    # # Step 1: Get average loss for each student
-    # avg_losses = [
-    #     get_moving_average_loss(0),  # Student 0: 0.42
-    #     get_moving_average_loss(1),  # Student 1: 0.38  ← Lowest!
-    #     get_moving_average_loss(2),  # Student 2: 0.45
-    #     # ... up to student 7
-    # ]    #
-    # # Step 2: Find index of minimum loss
-    # best_index = np.argmin([0.42, 0.38, 0.45, ...])  # Returns 1
 
     def evaluate_students(self, test_loader, step):
         teacher_correct = 0
@@ -125,15 +166,14 @@ class CollaborativeClassroom:
         # Convert raw counts to percentages
         # Example: 950 correct out of 1000 samples = 95% accuracy
 
-
         #  Track History & Detect Breakthrough:
         self.history['teacher_accuracy'].append(teacher_acc)
         self.history['best_student_accuracy'].append(best_acc)
         self.history['class_avg_accuracy'].append(class_acc)
 
         if (not self.history['class_surpassed_best'] and
-            class_acc > best_acc and
-            step > 500):
+                class_acc > best_acc and
+                step > 500):
             self.history['class_surpassed_best'] = True
             self.history['step_when_surpassed'] = step
             print(f"\n BREAKTHROUGH! Class surpassed best student at step {step}!")
@@ -168,7 +208,7 @@ class CollaborativeClassroom:
         if step % self.eval_interval == 0:
             self.best_student_idx = self.find_best_student()
         # Every 200 steps: Re-evaluate who's the best student
-        # Purpose: Ensure we're learning from the current top performer
+        # Using validation accuracy instead of training loss in order to ensure we're learning from the current top performer that generalizes best
         # Example: At steps 0, 200, 400, 600... find new best student
 
         # Phase 3A: Teacher-Led Learning
