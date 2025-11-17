@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import torch
 import collaborative_classroom as CollaborativeClassroom
 
+
 class Experiments:
 
     # Data Pipeline Setup
@@ -11,17 +12,26 @@ class Experiments:
     # Normalize((0.1307,), (0.3081,)): Standardize using MNIST mean & std
     # Why normalize: Helps neural networks learn faster and more stable
     @staticmethod
-    def create_data_stream(batch_size=32):
+    def create_data_stream(batch_size=32, val_batch_size=100):
         transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,))
         ])
 
-        # Dataset Creation:
-        # Training set: 60,000 images for learning
-        # Test set: 10,000 images for evaluation
+        # Dataset Creation with Validation Split:
+        # Full training set: 60,000 images
+        # Split: 80% training (48,000), 20% validation (12,000)
+        # Test set: 10,000 images for final evaluation
         # download=True: Automatically downloads if not present
-        train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
+        full_train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
+
+        # Use 80% for training, 20% for validation
+        train_size = int(0.8 * len(full_train_dataset))
+        val_size = len(full_train_dataset) - train_size
+        train_dataset, val_dataset = torch.utils.data.random_split(
+            full_train_dataset, [train_size, val_size]
+        )
+
         test_dataset = datasets.MNIST('./data', train=False, transform=transform)
 
         # Data Loaders - The Collectionless Stream:
@@ -30,9 +40,10 @@ class Experiments:
         # No storage: Data flows through, never accumulated
         # Batch processing: Learn from 64 images, then discard
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=val_batch_size, shuffle=False)
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=False)
 
-        return train_loader, test_loader
+        return train_loader, val_loader, test_loader
 
     @staticmethod
     def run_experiment():
@@ -44,9 +55,21 @@ class Experiments:
         # 100-loss window: Track recent performance effectively
         # Evaluate every 200 steps: Frequent enough to catch trends
         # Batch size 64: Balance between stability and speed
-        classroom = CollaborativeClassroom.CollaborativeClassroom(num_students=8, moving_avg_window=100,
-                                                                  eval_interval=200)
-        train_loader, test_loader = Experiments.create_data_stream(batch_size=64)
+        # Validation batch size 100: Small consistent batches for fair comparison
+        classroom = CollaborativeClassroom.CollaborativeClassroom(
+            num_students=8,
+            moving_avg_window=100,
+            eval_interval=200,
+            val_batch_size=100
+        )
+
+        # Get train, validation, and test loaders
+        train_loader, val_loader, test_loader = Experiments.create_data_stream(batch_size=64, val_batch_size=100)
+
+        # Setup validation batches for consistent evaluation
+        # Virtualization: Storing fixed validation batches in order to ensure fair comparison when selecting the best student
+        # Same data used every evaluation = no bias from different samples
+        classroom.setup_validation_batches(val_loader, num_batches=5)
 
         # Phase 2: Training Loop
         # Collectionless Data Streaming:
@@ -72,13 +95,14 @@ class Experiments:
             # Every 500 steps: Take snapshot of performance
             # Real-time monitoring: Watch collective intelligence emerge
             # Phase tracking: See teacher→peer transition
+            # Best student selection uses validation accuracy
             classroom.learn_step(x, y_true, step)
 
             if step % eval_every == 0 or step == steps - 1:
                 teacher_acc, best_acc, class_acc = classroom.evaluate_students(test_loader, step)
                 print(f"Step {step:4d} | Teacher: {teacher_acc:.3f} | "
                       f"Best Student: {best_acc:.3f} | Class: {class_acc:.3f} | "
-                      f"Phase: {classroom.phase}")
+                      f"Phase: {classroom.phase} | Best Student ID: {classroom.best_student_idx}")
 
         # Phase 4: Results Analysis
         print("\n" + "=" * 60)
