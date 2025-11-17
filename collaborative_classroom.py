@@ -104,16 +104,15 @@ class CollaborativeClassroom:
         # Returning student with the highest validation accuracy
         return np.argmax(val_accuracies)
 
-    def get_moving_average_loss(self, student_idx):
-        if len(self.loss_memory[student_idx]) == 0:
-            return float('inf')
-        return np.mean(list(self.loss_memory[student_idx]))
-
     # Checks if student has learning history: len(self.loss_memory[student_idx]) == 0
     # If no history: Returns float('inf') (infinity) - worst possible score
     # If it has history: Calculates average of recent losses
     # Student #3's loss_memory: [0.45, 0.42, 0.38, 0.35, 0.32]
     # get_moving_average_loss(3) → (0.45+0.42+0.38+0.35+0.32)/5 = 0.384
+    def get_moving_average_loss(self, student_idx):
+        if len(self.loss_memory[student_idx]) == 0:
+            return float('inf')
+        return np.mean(list(self.loss_memory[student_idx]))
 
     def evaluate_students(self, test_loader, step):
         teacher_correct = 0
