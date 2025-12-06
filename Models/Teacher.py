@@ -6,11 +6,11 @@ class Teacher:
 
     # When a student asks for help:
     def teach(self, x, y_true):
-        # Step 1: Check if teacher still has "energy"
+        # Step 1: Checking if teacher still has "energy"
         if self.calls_remaining > 0:
-            # Step 2: Use up one teaching opportunity
+            # Step 2: Using up one teaching opportunity
             self.calls_remaining -= 1
-            # Step 3: Provide the correct answer
+            # Step 3: Providing the correct answer
             return y_true
         # Step 4: If exhausted, provide no help
         return None
