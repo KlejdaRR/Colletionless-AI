@@ -3,14 +3,13 @@ import matplotlib.pyplot as plt
 import torch
 import collaborative_classroom as CollaborativeClassroom
 
-
 class Experiments:
 
     # Data Pipeline Setup
     # Data Preprocessing Pipeline:
-    # ToTensor(): Convert images from (0-255) to (0.0-1.0) tensors
+    # ToTensor(): Converts images from (0-255) to (0.0-1.0) tensors
     # Normalize((0.1307,), (0.3081,)): Standardize using MNIST mean & std
-    # Why normalize: Helps neural networks learn faster and more stable
+    # Why normalize: In order to help neural networks learn faster and more stable
     @staticmethod
     def create_data_stream(batch_size=32, val_batch_size=100):
         transform = transforms.Compose([
@@ -22,10 +21,9 @@ class Experiments:
         # Full training set: 60,000 images
         # Split: 80% training (48,000), 20% validation (12,000)
         # Test set: 10,000 images for final evaluation
-        # download=True: Automatically downloads if not present
         full_train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
 
-        # Use 80% for training, 20% for validation
+        # Using 80% for training, 20% for validation
         train_size = int(0.8 * len(full_train_dataset))
         val_size = len(full_train_dataset) - train_size
         train_dataset, val_dataset = torch.utils.data.random_split(
@@ -39,6 +37,7 @@ class Experiments:
         # shuffle=True: Random order every epoch = true streaming experience
         # No storage: Data flows through, never accumulated
         # Batch processing: Learn from 64 images, then discard
+
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=val_batch_size, shuffle=False)
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=False)
@@ -50,12 +49,13 @@ class Experiments:
         print("Initializing Collaborative Classroom Experiment...")
 
         # Phase 1: Setup
-        # Your Experimental Configuration:
-        # 8 students: Enough for diversity, manageable computation
-        # 100-loss window: Track recent performance effectively
-        # Evaluate every 200 steps: Frequent enough to catch trends
-        # Batch size 64: Balance between stability and speed
-        # Validation batch size 100: Small consistent batches for fair comparison
+        # Experimental Configuration:
+        # 8 students:
+        # 100-loss window: Tracing recent performance
+        # Evaluating every 200 steps
+        # Batch size 64
+        # Validation batch size 100
+
         classroom = CollaborativeClassroom.CollaborativeClassroom(
             num_students=8,
             moving_avg_window=100,
@@ -63,19 +63,19 @@ class Experiments:
             val_batch_size=100
         )
 
-        # Get train, validation, and test loaders
+        # Getting train, validation, and test loaders
         train_loader, val_loader, test_loader = Experiments.create_data_stream(batch_size=64, val_batch_size=100)
 
-        # Setup validation batches for consistent evaluation
+        # Setting up validation batches for consistent evaluation
         # Virtualization: Storing fixed validation batches in order to ensure fair comparison when selecting the best student
         # Same data used every evaluation = no bias from different samples
         classroom.setup_validation_batches(val_loader, num_batches=5)
 
         # Phase 2: Training Loop
         # Collectionless Data Streaming:
-        # iter(train_loader): Creates an iterator over the data stream
-        # next(data_iter): Gets next batch (64 images + labels)
-        # StopIteration: When stream ends, restart from beginning
+        # iter(train_loader): Creating an iterator over the data stream
+        # next(data_iter): Getting next batch (64 images + labels)
+        # StopIteration: When stream ends, restarting from beginning
         # No memory: Each batch processed and forgotten
         steps = 5000
         eval_every = 500
@@ -92,9 +92,9 @@ class Experiments:
 
             # Phase 3: Learning & Evaluation Cycle
             # Periodic Checkpoints:
-            # Every 500 steps: Take snapshot of performance
-            # Real-time monitoring: Watch collective intelligence emerge
-            # Phase tracking: See teacher→peer transition
+            # Every 500 steps: Taking snapshot of performance
+            # Real-time monitoring: Watching collective intelligence emerge
+            # Phase tracking: Seeing teacher→peer transition
             # Best student selection uses validation accuracy
             classroom.learn_step(x, y_true, step)
 

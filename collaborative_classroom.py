@@ -278,6 +278,6 @@ class CollaborativeClassroom:
                 self.loss_memory[i].append(total_loss.item())
 
                 # Loss Balancing:
-                # 70%: Learn from the best student's thinking style
-                # 30%: Learn from ground truth answers (if available)
+                # 70%: Learning from the best student's thinking style
+                # 30%: Learning from ground truth answers (if available)
                 # Gradual transition: Pure distillation when teacher leaves
