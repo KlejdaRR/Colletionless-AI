@@ -8,19 +8,18 @@ from Models.Student import Student
 
 class CollaborativeClassroom:
     def __init__(self, num_students=8, moving_avg_window=100, eval_interval=200, val_batch_size=100):
-        self.num_students = num_students  # How many neural networks in the classroom
-        self.moving_avg_window = moving_avg_window  # How many recent losses to track per student
-        self.eval_interval = eval_interval  # How often to find the "best student"
-        self.val_batch_size = val_batch_size  # Size of validation batches for best student selection
+        self.num_students = num_students  # the amount of neural networks in the classroom
+        self.moving_avg_window = moving_avg_window  # the amount of recent losses to track per student
+        self.eval_interval = eval_interval  # how often to find the "best student"
+        self.val_batch_size = val_batch_size  # size of validation batches for best student selection
 
         self.students = [Student() for _ in range(num_students)]
         # Creating num_students independent neural networks
-        # Each student has different random initial weights -> Diverse starting points for learning
+        # Each student has different random initial weights in order to get diverse starting points for learning
 
         self.optimizers = [optim.Adam(student.parameters(), lr=0.001) for student in self.students]
         # One optimizer per student: Each student learns at their own pace
         # Adam optimizer: Adaptive learning rate (smarter than basic SGD)
-        # Learning rate 0.001
 
         self.teacher = Teacher()
         # Single teacher for all students
@@ -56,7 +55,6 @@ class CollaborativeClassroom:
 
     def setup_validation_batches(self, val_loader, num_batches=5):
         # Extracting 5 batches from the validation dataset
-        # and storing fixed validation batches for consistent evaluation
         self.validation_batches = []
         val_iter = iter(val_loader)
 
