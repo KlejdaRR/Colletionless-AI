@@ -7,10 +7,10 @@ from Models.Teacher import Teacher
 from Models.Student import Student
 
 class CollaborativeClassroom:
-    def __init__(self, num_students=8, moving_avg_window=100, eval_interval=200, val_batch_size=100):
+    def __init__(self, num_students=8, moving_avg_window=100, eval_interval_for_best_student=200, val_batch_size=100):
         self.num_students = num_students  # the amount of neural networks in the classroom
         self.moving_avg_window = moving_avg_window  # the amount of recent losses to track per student
-        self.eval_interval = eval_interval  # how often to find the "best student"
+        self.eval_interval_for_best_student = eval_interval_for_best_student  # how often to find the "best student"
         self.val_batch_size = val_batch_size  # size of validation batches for best student selection
 
         self.students = [Student() for _ in range(num_students)]
@@ -125,7 +125,7 @@ class CollaborativeClassroom:
             return float('inf')
         return np.mean(list(self.loss_memory[student_idx]))
 
-    def evaluate_students(self, test_loader, step):
+    def evaluate_class(self, test_loader, step):
         teacher_correct = 0
         best_student_correct = 0
         class_total_correct = 0
@@ -205,7 +205,7 @@ class CollaborativeClassroom:
         # Setup: Teacher has 1000 calls, so phase transition happens at step 2000
 
         #  Phase 2: Updating Best Student (Periodically)
-        if step % self.eval_interval == 0:
+        if step % self.eval_interval_for_best_student == 0:
             self.best_student_idx = self.find_best_student()
 
         # Every 200 steps: Re-evaluating who's the best student

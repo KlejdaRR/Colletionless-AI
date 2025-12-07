@@ -49,9 +49,8 @@ class Experiments:
         print("Initializing Collaborative Classroom Experiment...")
 
         # Phase 1: Setup
-        # Experimental Configuration:
         # 8 students:
-        # 100-loss window: Tracing recent performance
+        # 100-loss window of recent performance
         # Evaluating every 200 steps
         # Batch size 64
         # Validation batch size 100
@@ -59,7 +58,7 @@ class Experiments:
         classroom = CollaborativeClassroom.CollaborativeClassroom(
             num_students=8,
             moving_avg_window=100,
-            eval_interval=200,
+            eval_interval_for_best_student=200,
             val_batch_size=100
         )
 
@@ -78,7 +77,7 @@ class Experiments:
         # StopIteration: When stream ends, restarting from beginning
         # No memory: Each batch processed and forgotten
         steps = 5000
-        eval_every = 500
+        class_evaluation_every = 500
 
         print(f"\nStarting training for {steps} steps...")
 
@@ -91,15 +90,12 @@ class Experiments:
                 x, y_true = next(data_iter)
 
             # Phase 3: Learning & Evaluation Cycle
-            # Periodic Checkpoints:
-            # Every 500 steps: Taking snapshot of performance
-            # Real-time monitoring: Watching collective intelligence emerge
-            # Phase tracking: Seeing teacher→peer transition
-            # Best student selection uses validation accuracy
+            # learning
             classroom.learn_step(x, y_true, step)
 
-            if step % eval_every == 0 or step == steps - 1:
-                teacher_acc, best_acc, class_acc = classroom.evaluate_students(test_loader, step)
+            # evaluation of students every 500 steps
+            if step % class_evaluation_every == 0 or step == steps - 1:
+                teacher_acc, best_acc, class_acc = classroom.evaluate_class(test_loader, step)
                 print(f"Step {step:4d} | Teacher: {teacher_acc:.3f} | "
                       f"Best Student: {best_acc:.3f} | Class: {class_acc:.3f} | "
                       f"Phase: {classroom.phase} | Best Student ID: {classroom.best_student_idx}")
