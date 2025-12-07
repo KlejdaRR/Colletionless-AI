@@ -76,7 +76,7 @@ class CollaborativeClassroom:
         with torch.no_grad():
             for x_val, y_val in self.validation_batches:
                 # Example explaining a batch of 4 images
-                output = student(x_val)  # shape: [4, 10] - 4 images, 10 classes each
+                output = student.forward(x_val)  # shape: [4, 10] - 4 images, 10 classes each
 
                 # Step 1: Getting predictions
                 pred = output.argmax(dim=1, keepdim=True)
@@ -91,8 +91,8 @@ class CollaborativeClassroom:
                 correct = comparison.sum().item()  # 3
 
                 # Step 4: Updating totals
-                total_correct += 3
-                total_samples += 4  # len(x_val) = 4
+                total_correct += correct
+                total_samples += len(x_val)
 
         return total_correct / total_samples if total_samples > 0 else 0
 
@@ -134,7 +134,7 @@ class CollaborativeClassroom:
         with torch.no_grad():  # Disabling gradient calculation for efficiency
             for data, target in test_loader:  # Processing one batch of test data
 
-                # Teacher Accuracy (if available):
+                # If available, I store the results of the predictions using the teacher approach
                 if self.teacher.calls_remaining > 0:
                     # Best student makes predictions on test batch
                     teacher_pred = self.students[self.best_student_idx].forward(data)
@@ -146,7 +146,7 @@ class CollaborativeClassroom:
                     teacher_correct += teacher_pred.eq(target.view_as(teacher_pred)).sum().item()
 
                 # Best Student Accuracy:
-                best_pred = self.students[self.best_student_idx](data)
+                best_pred = self.students[self.best_student_idx].forward(data)
                 best_pred = best_pred.argmax(dim=1, keepdim=True)
                 best_student_correct += best_pred.eq(target.view_as(best_pred)).sum().item()
 
