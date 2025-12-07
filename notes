@@ -1,0 +1,114 @@
+The whole process starts with the calling of the run_experiment() function of the Experiments class.
+
+When calling this method the following processes are being executed:
+
+An object of the Classroom() class is created with:
+
+-- a number of students
+-- a window size for the conservation of the losses
+-- a set number of intervals for when to find evaluate on the validation dataset for the best student
+-- the size of the validation dataset
+
+What happens inside the Classroom() initialization:
+
+-- 8 Student neural networks are created, each with random initial weights
+-- 8 Adam optimizers are created (one for each student)
+-- 1 Teacher is created with 1000 teaching "calls"
+-- Loss history queues are initialized for each student (to track last 100 losses)
+-- Initial phase is set to "teacher_phase"
+-- History tracking dictionary is prepared for storing accuracies
+
+The datasets are retrieved (one for training and one for validation) with respectively 64 batch size and 100 batch size.
+
+The function setup_validation_batches() of the Classroom() class is called in order to set up the validation dataset's
+batches which will be used to find the best student every 200 steps.
+
+What happens inside setup_validation_batches():
+
+-- Extracts 5 batches from the validation dataloader
+-- Stores them in a list called self.validation_batches
+-- These batches are FIXED and will be used every time we need to find the best student
+-- This ensures consistent evaluation across different steps
+
+The loop is started containing 5000 steps, where for each step the inputs and the true values are retrieved
+from the training dataset and along with the current number of the step are fed to the learn_step() method
+of the Classroom() class.
+
+What happens inside learn_step(x, y_true, step):
+
+-- Phase 1: Determine Learning Mode:
+--- If step < 2000 AND teacher still has calls remaining: phase = "teacher_phase"
+--- Otherwise: phase = "peer_phase"
+
+-- Phase 2: Update Best Student (happens every 200 steps)
+--- Calls find_best_student() method
+
+--- Inside find_best_student():
+---- Loops through all 8 students
+---- For each student, calls evaluate_student_on_validation(i)
+
+   ---- Inside evaluate_student_on_validation():
+     ----- Student makes predictions on all 5 validation batches
+     ----- Compares predictions with true labels
+     ----- Calculates accuracy percentage
+
+  ---- Returns the index of student with highest validation accuracy
+-- Phase 3A: Teacher-Led Learning (if phase == "teacher_phase")
+--- For each of the 8 students:
+---- optimizer.zero_grad() - Reset gradients
+---- output = student.forward(x) - Make predictions
+---- loss = F.nll_loss(output, y_true) - Calculate loss using true labels
+---- loss.backward() - Calculate gradients
+---- optimizer.step() - Update weights
+---- Record loss in student's loss history
+
+-- Phase 3B: Peer-to-Peer Learning (if phase == "peer_phase")
+--- Step 1: Best student creates "soft targets"
+---- best_student_output = best_student(x) - Best student makes predictions
+---- soft_targets = F.softmax(best_student_output / 2.0) - Convert to probabilities with "temperature"
+
+--- Step 2: Other students learn from best student
+---- For each non-best student:
+----- student_output = student(x) - Student's own prediction
+----- distillation_loss = KL_divergence(student_output, soft_targets) - Compare with best student
+----- If teacher still has calls: also learn from true labels with 30% weight
+----- total_loss.backward() and optimizer.step() - Update weights
+----- Record loss in history
+
+--- Step 3: Best student learns only from true labels (if teacher has calls)
+---- This keeps the best student sharp while teaching others
+
+The evaluation process starts and it should happen every 500 step in order to evaluate all of the students
+of the class and find out if they have surpassed the best student. It is done by calling the evaluate_students()
+function of the Classroom() class.
+
+What happens inside evaluate_students(test_loader, step):
+
+-- For each batch in the test dataset:
+--- Teacher Accuracy (if teacher still has calls):
+---- best_student makes predictions
+---- Compare with true labels, count correct predictions
+
+--- Best Student Accuracy:
+---- best_student makes predictions
+---- Compare with true labels, count correct predictions
+
+--- Class Collective Accuracy (VOTING):
+---- All 8 students make predictions on the batch
+---- For each image in the batch, take the majority vote across all 8 students
+---- Compare majority vote with true labels, count correct predictions
+
+--- Breakthrough Detection:
+---- If class accuracy > best student accuracy AND step > 500:
+----- Record that class has surpassed best student
+----- Store the step number when this happened
+
+--- Store all accuracies in history for plotting
+
+After 5000 steps:
+
+-- The system checks if the collective voting (Class accuracy) surpassed the individual best student
+-- Results are printed showing final accuracies
+-- A plot is generated showing the learning progress over time
+-- If class surpassed best student: SUCCESS - collective intelligence emerged
+-- If not: The system shows that collaboration didn't beat the individual expert

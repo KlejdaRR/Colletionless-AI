@@ -49,12 +49,11 @@ class Experiments:
         print("Initializing Collaborative Classroom Experiment...")
 
         # Phase 1: Setup
-        # 8 students:
+        # 8 students
         # 100-loss window of recent performance
-        # Evaluating every 200 steps
+        # Evaluating the best student every 200 steps
         # Batch size 64
         # Validation batch size 100
-
         classroom = CollaborativeClassroom.CollaborativeClassroom(
             num_students=8,
             moving_avg_window=100,
@@ -65,7 +64,7 @@ class Experiments:
         # Getting train, validation, and test loaders
         train_loader, val_loader, test_loader = Experiments.create_data_stream(batch_size=64, val_batch_size=100)
 
-        # Setting up validation batches for consistent evaluation
+        # Setting up validation batches for consistent evaluation of the best student
         # Virtualization: Storing fixed validation batches in order to ensure fair comparison when selecting the best student
         # Same data used every evaluation = no bias from different samples
         classroom.setup_validation_batches(val_loader, num_batches=5)
@@ -81,6 +80,7 @@ class Experiments:
 
         print(f"\nStarting training for {steps} steps...")
 
+        # starting training loop on the training dataset (train_loader)
         data_iter = iter(train_loader)
         for step in range(steps):
             try:
@@ -93,7 +93,7 @@ class Experiments:
             # learning
             classroom.learn_step(x, y_true, step)
 
-            # evaluation of students every 500 steps
+            # evaluation of class's students every 500 steps
             if step % class_evaluation_every == 0 or step == steps - 1:
                 teacher_acc, best_acc, class_acc = classroom.evaluate_class(test_loader, step)
                 print(f"Step {step:4d} | Teacher: {teacher_acc:.3f} | "

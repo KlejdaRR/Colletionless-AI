@@ -225,7 +225,7 @@ class CollaborativeClassroom:
         else:
             # Step 1: Best Student Creates "Soft Targets"
             with torch.no_grad(): # Best student makes predictions but doesn't learn (frozen for this step)
-                best_student_output = self.students[self.best_student_idx](x) #  Raw scores from the best student
+                best_student_output = self.students[self.best_student_idx].forward(x) #  Raw scores from the best student
                 soft_targets = F.softmax(best_student_output / 2.0, dim=1) # Converting to probabilities with "temperature"
             # Without temperature (normal softmax):
             # [8.0, 2.0, 0.1] → [0.97, 0.03, 0.00] (very confident)
