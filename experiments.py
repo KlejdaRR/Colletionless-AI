@@ -2,6 +2,7 @@ from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import torch
 import collaborative_classroom as CollaborativeClassroom
+import advanced_collaborative_classroom as AdvancedCollaborativeClassroom
 
 class Experiments:
 
@@ -54,11 +55,18 @@ class Experiments:
         # Evaluating the best student every 200 steps
         # Batch size 64
         # Validation batch size 100
-        classroom = CollaborativeClassroom.CollaborativeClassroom(
-            num_students=8,
-            moving_avg_window=100,
-            eval_interval_for_best_student=200,
-            val_batch_size=100
+        #classroom = CollaborativeClassroom.CollaborativeClassroom(
+        #    num_students=8,
+        #    moving_avg_window=100,
+        #    eval_interval_for_best_student=200,
+        #    val_batch_size=100
+        #)
+
+        classroom = AdvancedCollaborativeClassroom.AdvancedCollaborativeClassroom(
+            num_students = 8,
+            moving_avg_window = 100,
+            eval_interval_for_best_student = 200,
+            val_batch_size = 100
         )
 
         # Getting train, validation, and test loaders
