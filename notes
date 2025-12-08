@@ -2,11 +2,11 @@ The whole process starts with the calling of the run_experiment() function of th
 
 When calling this method the following processes are being executed:
 
-An object of the Classroom() class is created with:
+1. An object of the Classroom() class is created with:
 
 -- a number of students
 -- a window size for the conservation of the losses
--- a set number of intervals for when to find evaluate on the validation dataset for the best student
+-- a set number of intervals for when to evaluate on the validation dataset for the best student
 -- the size of the validation dataset
 
 What happens inside the Classroom() initialization:
@@ -18,10 +18,11 @@ What happens inside the Classroom() initialization:
 -- Initial phase is set to "teacher_phase"
 -- History tracking dictionary is prepared for storing accuracies
 
-The datasets are retrieved (one for training and one for validation) with respectively 64 batch size and 100 batch size.
+2. The datasets are retrieved (one for training and one for validation) with respectively 64 batch size and
+100 batch size.
 
-The function setup_validation_batches() of the Classroom() class is called in order to set up the validation dataset's
-batches which will be used to find the best student every 200 steps.
+3. The function setup_validation_batches() of the Classroom() class is called in order to set up the validation
+dataset's batches which will be used to find the best student every 200 steps.
 
 What happens inside setup_validation_batches():
 
@@ -30,17 +31,17 @@ What happens inside setup_validation_batches():
 -- These batches are FIXED and will be used every time we need to find the best student
 -- This ensures consistent evaluation across different steps
 
-The loop is started containing 5000 steps, where for each step the inputs and the true values are retrieved
-from the training dataset and along with the current number of the step are fed to the learn_step() method
+4. The loop is started containing 5000 steps, where for each step the inputs and the true values are retrieved
+from the training dataset and along with the current number of the step and are fed to the learn_step() method
 of the Classroom() class.
 
 What happens inside learn_step(x, y_true, step):
 
--- Phase 1: Determine Learning Mode:
+-- Phase 4.1: Determine Learning Mode:
 --- If step < 2000 AND teacher still has calls remaining: phase = "teacher_phase"
 --- Otherwise: phase = "peer_phase"
 
--- Phase 2: Update Best Student (happens every 200 steps)
+-- Phase 4.2: Update Best Student (happens every 200 steps)
 --- Calls find_best_student() method
 
 --- Inside find_best_student():
@@ -53,7 +54,7 @@ What happens inside learn_step(x, y_true, step):
      ----- Calculates accuracy percentage
 
   ---- Returns the index of student with highest validation accuracy
--- Phase 3A: Teacher-Led Learning (if phase == "teacher_phase")
+-- Phase 4.3.1: Teacher-Led Learning (if phase == "teacher_phase")
 --- For each of the 8 students:
 ---- optimizer.zero_grad() - Reset gradients
 ---- output = student.forward(x) - Make predictions
@@ -62,12 +63,12 @@ What happens inside learn_step(x, y_true, step):
 ---- optimizer.step() - Update weights
 ---- Record loss in student's loss history
 
--- Phase 3B: Peer-to-Peer Learning (if phase == "peer_phase")
---- Step 1: Best student creates "soft targets"
+-- Phase 4.3.2: Peer-to-Peer Learning (if phase == "peer_phase")
+--- 4.3.2.1: Best student creates "soft targets"
 ---- best_student_output = best_student(x) - Best student makes predictions
 ---- soft_targets = F.softmax(best_student_output / 2.0) - Convert to probabilities with "temperature"
 
---- Step 2: Other students learn from best student
+--- 4.3.2.2: Other students learn from best student
 ---- For each non-best student:
 ----- student_output = student(x) - Student's own prediction
 ----- distillation_loss = KL_divergence(student_output, soft_targets) - Compare with best student
@@ -75,10 +76,10 @@ What happens inside learn_step(x, y_true, step):
 ----- total_loss.backward() and optimizer.step() - Update weights
 ----- Record loss in history
 
---- Step 3: Best student learns only from true labels (if teacher has calls)
+--- 4.3.2.3: Best student learns only from true labels (if teacher has calls)
 ---- This keeps the best student sharp while teaching others
 
-The evaluation process starts and it should happen every 500 step in order to evaluate all of the students
+5. The evaluation process starts and it should happen every 500 step in order to evaluate all of the students
 of the class and find out if they have surpassed the best student. It is done by calling the evaluate_students()
 function of the Classroom() class.
 

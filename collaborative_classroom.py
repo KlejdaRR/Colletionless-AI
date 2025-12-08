@@ -213,25 +213,34 @@ class CollaborativeClassroom:
 
         # Phase 3A: Teacher-Led Learning
         if self.phase == "teacher_phase":
-            for i, (student, optimizer) in enumerate(zip(self.students, self.optimizers)):
-                optimizer.zero_grad() # resetting gradients: clearing previous update directions
-                output = student.forward(x) # forward pass: making predictions on current batch
-                loss = F.nll_loss(output, y_true) # calculating loss: comparing with teacher's correct answers
-                loss.backward() # calculating how to improve (gradients of loss with respect to weights and biases)
-                optimizer.step() # updating weights: actually improving the network
-                self.loss_memory[i].append(loss.item()) # recording loss: tracking performance
+            # Getting teacher's response for this batch (consumes a call if available)
+            teacher_response = self.teacher.teach(x, y_true)
 
-        # Phase 3B: Peer-to-Peer Learning
-        else:
+            if teacher_response is not None:
+                # Teacher still has calls - use teacher's labels
+                for i, (student, optimizer) in enumerate(zip(self.students, self.optimizers)):
+                    optimizer.zero_grad()  # resetting gradients: clearing previous update directions
+                    output = student.forward(x)  # forward pass: making predictions on current batch
+                    loss = F.nll_loss(output, teacher_response)  # calculating loss: comparing with teacher's correct answers
+                    loss.backward()  # calculating how to improve (gradients of loss with respect to weights and biases)
+                    optimizer.step()  # updating weights: actually improving the network
+                    self.loss_memory[i].append(loss.item())  # recording loss: tracking performance
+            else:
+                # Teacher is exhausted - switching to peer learning for this step
+                self.phase = "peer_phase"
+                # Continue to Phase 3B
+
+        # Phase 3B: Peer-to-Peer Learning (also handles case when teacher is exhausted)
+        if self.phase == "peer_phase":
             # Step 1: Best Student Creates "Soft Targets"
-            with torch.no_grad(): # Best student makes predictions but doesn't learn (frozen for this step)
-                best_student_output = self.students[self.best_student_idx].forward(x) #  Raw scores from the best student
-                soft_targets = F.softmax(best_student_output / 2.0, dim=1) # Converting to probabilities with "temperature"
+            with torch.no_grad():  # Best student makes predictions but doesn't learn (frozen for this step)
+                best_student_output = self.students[self.best_student_idx](x)  # Raw scores from the best student
+                soft_targets = F.softmax(best_student_output / 2.0,
+                                         dim=1)  # Converting to probabilities with "temperature"
             # Without temperature (normal softmax):
             # [8.0, 2.0, 0.1] → [0.97, 0.03, 0.00] (very confident)
             # With temperature=2.0:
             # [8.0/2, 2.0/2, 0.1/2] = [4.0, 1.0, 0.05] → [0.95, 0.05, 0.00] (softer, more informative)
-
 
             # Step 2: Different Learning Paths
             # Best Student's Special Treatment:
@@ -241,10 +250,11 @@ class CollaborativeClassroom:
             for i, (student, optimizer) in enumerate(zip(self.students, self.optimizers)):
                 if i == self.best_student_idx:
                     # Best student continues learning from data (if teacher available)
-                    if self.teacher.calls_remaining > 0:
+                    teacher_response = self.teacher.teach(x, y_true)
+                    if teacher_response is not None:
                         optimizer.zero_grad()
                         output = student.forward(x)
-                        loss = F.nll_loss(output, y_true)
+                        loss = F.nll_loss(output, teacher_response)
                         loss.backward()
                         optimizer.step()
                         self.loss_memory[i].append(loss.item())
@@ -265,8 +275,9 @@ class CollaborativeClassroom:
                 )
 
                 # Step 4: Combined Learning (If Teacher Available)
-                if self.teacher.calls_remaining > 0:
-                    classification_loss = F.nll_loss(student_output, y_true)
+                teacher_response = self.teacher.teach(x, y_true)
+                if teacher_response is not None:
+                    classification_loss = F.nll_loss(student_output, teacher_response)
                     total_loss = 0.7 * distillation_loss + 0.3 * classification_loss
                 else:
                     total_loss = distillation_loss
